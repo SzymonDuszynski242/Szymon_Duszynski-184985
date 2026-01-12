@@ -1,0 +1,65 @@
+LAB 10
+
+1
+CREATE TABLE ORDER_STATUS_HISTORY (ORDER_NUMBER INT NOT NULL, CHANGE_DATE DATETIME NOT NULL, NEW_STATUS_NAME VARCHAR(255) NOT NULL);
+
+DELIMITER $$
+CREATE TRIGGER trg_order_status_change
+AFTER UPDATE ON `ORDER`
+FOR EACH ROW
+BEGIN
+    INSERT INTO ORDER_STATUS_HISTORY SELECT o.ORDER_NUMBER, now(), os.STATUS_NAME FROM 
+	`ORDER` o JOIN ORDER_STATUS os on o.ORDER_STATUS=os.STATUS_ID
+    WHERE O.ORDER_ID=OLD.ORDER_ID;
+END;$$
+
+2
+DELIMITER $$
+CREATE TRIGGER trg_check_inventory_before_insertBEFORE INSERT 
+ON ORDER_POSITION FOR EACH ROW
+BEGIN
+DECLARE available INT;
+    SELECT AVAILABLE_QTY INTO available FROM INVENTORY
+    WHERE PRODUCT_ID = NEW.PRODUCT_ID; IF available IS NULL OR available < NEW.AMOUNT THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Brak wystarczającej ilości produktu w magazynie.';
+    END IF;
+END $$
+
+DELIMITER ;
+
+3
+DELIMITER //
+CREATE PROCEDURE product_find_by_phrase(IN phrase varchar(255))
+BEGIN
+    SELECT * FROM product WHERE PRODUCT_NAME LIKE CONCAT('%', phrase, '%')
+    OR DESCRIPTION LIKE CONCAT('%', phrase, '%');
+END //
+DELIMITER ;
+
+DELIMITER //
+CREATE PROCEDURE product_find_by_phrase(IN phrase varchar(255))
+BEGIN
+    SELECT * FROM PRODUCT WHERE PRODUCT_NAME LIKE CONCAT('%', phrase, '%')
+    OR DESCRIPTION LIKE CONCAT('%', phrase, '%');
+END //
+DELIMITER ;
+
+CALL product_find_by_phrase('Torba');
+
+4
+DELIMITER //
+CREATE FUNCTION income_for_month(_year int, _month int)
+    RETURNS decimal(10,2)
+    deterministic
+    READS SQL DATA
+BEGIN
+    DECLARE total_income DECIMAL(10,2);
+    SELECT COALESCE(SUM(op.SELL_PRICE), 0.00) INTO total_income
+    FROM ORDER_POSITION op JOIN `ORDER` o ON op.ORDER_ID = o.ORDER_ID
+    WHERE YEAR(o.ORDER_DATE) = _year AND MONTH(o.ORDER_DATE) = _month; 
+    RETURN total_income;
+END //
+DELIMITER ;
+
+SELECT income_for_month(2024,3);
+
